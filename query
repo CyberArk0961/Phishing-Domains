@@ -1,53 +1,16 @@
 let PhishingDomains =
-externaldata(Domain:string)
-[
-  @"https://raw.githubusercontent.com/CyberArk0961/Phishing-Domains/refs/heads/main/output/daily_phishing_domains.csv"
-]
-with (format="csv", ignoreFirstRecord=true)
-| extend DomainLower = tolower(Domain)
-| summarize DomainSet = make_set(DomainLower);
+ThreatIntelligenceIndicator
+| where Source == "CyberArk0961-Phishing"
+| where IndicatorType == "DomainName"
+| summarize DomainSet = make_set(tolower(IndicatorValue));
 
-//
-// 1. Browser Redirects
-//
-let BrowserHits =
 DeviceNetworkEvents
-| where Timestamp > ago(30d)
-| where InitiatingProcessFileName in~ ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe")
-| extend UrlDomain = tostring(parse_url(RemoteUrl).Host)
-| extend UrlDomainLower = tolower(UrlDomain)
-| where UrlDomainLower has_any (DomainSet)
-| project
-    Timestamp,
-    DeviceName,
-    InitiatingProcessFileName,
-    RemoteUrl,
-    UrlDomain,
-    ActionType,
-    ReportId,
-    DetectionSource = "Browser Redirect";
+| extend Domain = tolower(tostring(parse_url(RemoteUrl).Host))
+| where Domain has_any (DomainSet)
+| project Timestamp, DeviceName, RemoteUrl, InitiatingProcessFileName
+| order by Timestamp desc
 
-//
-// 2. Email Link Clicks
-//
-let EmailHits =
-UrlClickEvents
-| where Timestamp > ago(30d)
-| extend UrlDomain = tostring(parse_url(Url).Host)
-| extend UrlDomainLower = tolower(UrlDomain)
-| where UrlDomainLower has_any (DomainSet)
-| project
-    Timestamp,
-    DeviceName,
-    UserPrincipalName,
-    Url,
-    UrlDomain,
-    ClickAction,
-    DetectionSource = "Email Link";
-
-//
-// Final Output
-//
-BrowserHits
-| union EmailHits
-| sort by Timestamp desc
+EmailUrlInfo
+| extend Domain = tolower(UrlDomain)
+| where Domain has_any (DomainSet)
+| project Timestamp, RecipientEmailAddress, Url, DeliveryAction
