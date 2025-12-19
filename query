@@ -1,16 +1,30 @@
-let PhishingDomains =
-ThreatIntelligenceIndicator
-| where Source == "CyberArk0961-Phishing"
-| where IndicatorType == "DomainName"
-| summarize DomainSet = make_set(tolower(IndicatorValue));
-
+let PhishingFeed =
+externaldata(Date:string, Domain:string)
+[
+  @"https://raw.githubusercontent.com/CyberArk0961/Phishing-Domains/refs/heads/main/output/daily_phishing_domains.csv"
+]
+with (format="csv", ignoreFirstRecord=true)
+| extend DomainLower = tolower(Domain);
 DeviceNetworkEvents
-| extend Domain = tolower(tostring(parse_url(RemoteUrl).Host))
-| where Domain has_any (DomainSet)
-| project Timestamp, DeviceName, RemoteUrl, InitiatingProcessFileName
-| order by Timestamp desc
+| where Timestamp > ago(7d)
+| extend UrlDomain = tolower(tostring(parse_url(RemoteUrl).Host))
+| join kind=inner (
+    PhishingFeed
+) on $left.UrlDomain == $right.DomainLower
+| project
+    Timestamp,
+    DeviceName,
+    RemoteUrl,
+    UrlDomain,
+    InitiatingProcessFileName,
+    ActionType,
+    ReportId,
+    DetectionSource = "Matched Phishing Domain"
+| sort by Timestamp desc
 
-EmailUrlInfo
-| extend Domain = tolower(UrlDomain)
-| where Domain has_any (DomainSet)
-| project Timestamp, RecipientEmailAddress, Url, DeliveryAction
+
+
+
+error:Error message
+Couldn't generate results because query execution exceeded the memory consumption limit. This limit applies to the total memory consumed during execution, including intermediate results, joins, and data transformations.
+How to resolve
